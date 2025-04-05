@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PCL 主页生成器</title>
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --background: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #2c3e50;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: var(--background);
+            color: var(--text-color);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .editor-panel {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .preview-panel {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 20px;
+            height: 90vh;
+            overflow-y: auto;
+        }
+
+        .component-block {
+            background: #f8f9fc;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid #e0e4eb;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .prop-group {
+            margin: 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        label {
+            font-weight: 500;
+            min-width: 100px;
+        }
+
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        /* 预览样式 */
+        .preview-card {
+            background: white;
+            border-radius: 8px;
+            margin: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .preview-title {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-weight: bold;
+        }
+
+        .preview-content {
+            padding: 15px;
+        }
+
+        .preview-text {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .preview-button {
+            display: inline-block;
+            background: #eee;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin: 4px;
+            font-size: 14px;
+        }
+
+        .preview-hint {
+            background: #fff3cd;
+            color: #856404;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="editor-panel">
+            <h1>PCL 主页生成器</h1>
+            
+            <div class="controls">
+                <select id="componentType" class="styled-select">
+                    <option value="card">卡片</option>
+                    <option value="text">文本</option>
+                    <option value="button">按钮</option>
+                    <option value="hint">提示条</option>
+                    <option value="image">图片</option>
+                </select>
+                <button onclick="addComponent()">➕ 添加组件</button>
+            </div>
+
+            <div id="workspace"></div>
+
+            <button onclick="generateXAML()" class="generate-btn">生成 XAML 代码</button>
+            <pre id="output"></pre>
+        </div>
+
+        <div class="preview-panel">
+            <h2>实时预览</h2>
+            <div id="previewArea"></div>
+        </div>
+    </div>
+
+    <script>
+        let components = [];
+        let currentId = 0;
+    
+        const componentTemplates = {
+            card: {
+                name: 'MyCard',
+                props: [
+                    { name: 'Title', label: '标题', type: 'text', default: '新卡片' },
+                    { name: 'Margin', label: '边距', type: 'text', default: '0,0,0,15' },
+                    { name: 'CanSwap', label: '可折叠', type: 'checkbox', default: true },
+                    { name: 'IsSwaped', label: '默认折叠', type: 'checkbox' }
+                ],
+                hasChildren: true
+            },
+            text: {
+                name: 'TextBlock',
+                props: [
+                    { name: 'Text', label: '内容', type: 'text', default: '示例文本' },
+                    { name: 'Margin', label: '边距', type: 'text', default: '0,0,0,4' },
+                    { name: 'Color', label: '颜色', type: 'color', default: '#000000' },
+                    { name: 'FontSize', label: '字号', type: 'number', default: '12' }
+                ]
+            },
+            button: {
+                name: 'MyButton',
+                props: [
+                    { name: 'Text', label: '文本', type: 'text', default: '新按钮' },
+                    { name: 'EventType', label: '事件类型', type: 'select', 
+                      options: ['打开网页', '启动游戏', '弹出窗口', '执行命令'] },
+                    { name: 'EventData', label: '事件数据', type: 'text' },
+                    { name: 'Width', label: '宽度', type: 'number' },
+                    { name: 'Height', label: '高度', type: 'number', default: '35' }
+                ]
+            },
+            hint: {
+                name: 'MyHint',
+                props: [
+                    { name: 'Text', label: '内容', type: 'text', default: '提示内容' },
+                    { name: 'IsWarn', label: '警告样式', type: 'checkbox', default: true }
+                ]
+            },
+            image: {
+                name: 'MyImage',
+                props: [
+                    { name: 'Source', label: '图片地址', type: 'text', 
+                      default: 'https://example.com/image.png' },
+                    { name: 'Height', label: '高度', type: 'number', default: '100' }
+                ]
+            }
+        };
+    
+        function addComponent(parentId = null) {
+            const type = document.getElementById('componentType').value;
+            const template = componentTemplates[type];
+            const id = currentId++;
+            
+            components.push({ id, type, parentId });
+            
+            let container;
+            if (parentId !== null) {
+                const parentBlock = document.querySelector(`[data-id="${parentId}"]`);
+                container = parentBlock.querySelector('.children');
+            } else {
+                container = document.getElementById('workspace');
+            }
+    
+            const block = document.createElement('div');
+            block.className = 'component-block' + (parentId ? ' child-component' : '');
+            block.dataset.id = id;
+            block.dataset.type = type;
+    
+            let html = `
+                <div style="margin-bottom: 10px;">
+                    <strong>${template.name}</strong>
+                    <button onclick="removeComponent(${id})" style="float: right;">删除</button>
+                </div>
+            `;
+    
+            template.props.forEach(prop => {
+                html += `<div class="prop-group">
+                    <label>${prop.label}:</label>`;
+                
+                if (prop.type === 'select') {
+                    html += `<select data-prop="${prop.name}">`;
+                    prop.options.forEach(option => {
+                        html += `<option>${option}</option>`;
+                    });
+                    html += '</select>';
+                } 
+                else if (prop.type === 'checkbox') {
+                    html += `<input type="checkbox" data-prop="${prop.name}" 
+                              ${prop.default ? 'checked' : ''}>`;
+                }
+                else {
+                    html += `<input type="${prop.type}" data-prop="${prop.name}" 
+                              value="${prop.default || ''}">`;
+                }
+                
+                html += `</div>`;
+            });
+    
+            if (template.hasChildren) {
+                html += `<div style="margin-top: 10px;">
+                    <button onclick="addChildComponent(${id})">添加子组件</button>
+                    <div class="children" data-parent="${id}"></div>
+                </div>`;
+            }
+    
+            block.innerHTML = html;
+            container.appendChild(block);
+            updatePreview();
+        }
+    
+        function addChildComponent(parentId) {
+            addComponent(parentId);
+        }
+    
+        function removeComponent(id) {
+            // 递归删除子组件
+            components.filter(c => c.parentId === id).forEach(child => {
+                removeComponent(child.id);
+            });
+    
+            const index = components.findIndex(c => c.id === id);
+            if (index > -1) {
+                components.splice(index, 1);
+            }
+            
+            const element = document.querySelector(`[data-id="${id}"]`);
+            if (element) element.remove();
+            updatePreview();
+        }
+    
+        function generateXAML() {
+            let xaml = '<!-- Generated by PCL Custom Homepage Generator www.qsn.me-->\n\n';
+            
+            components.filter(c => c.parentId === null).forEach(component => {
+                xaml += buildComponentXAML(component);
+            });
+    
+            document.getElementById('output').textContent = xaml;
+        }
+    
+        function buildComponentXAML(component) {
+            const template = componentTemplates[component.type];
+            const block = document.querySelector(`[data-id="${component.id}"]`);
+            let props = [];
+            
+            template.props.forEach(prop => {
+                const input = block.querySelector(`[data-prop="${prop.name}"]`);
+                if (!input) return;
+    
+                let value;
+                if (prop.type === 'checkbox') {
+                    value = input.checked ? 'True' : 'False';
+                } else {
+                    value = input.value.trim();
+                }
+                
+                if (value && value !== (prop.default || '').toString()) {
+                    props.push(`${prop.name}="${value}"`);
+                }
+            });
+    
+            let element = `<local:${template.name} ${props.join(' ')}`;
+            
+            const children = components.filter(c => c.parentId === component.id);
+            if (template.hasChildren && children.length > 0) {
+                element += `>\n    <StackPanel Margin="25,40,23,15">\n`;
+                children.forEach(child => {
+                    const childXAML = buildComponentXAML(child);
+                    element += '        ' + childXAML.replace(/\n/g, '\n        ');
+                });
+                element += `    </StackPanel>\n</local:${template.name}>\n\n`;
+            } else {
+                element += ` />\n\n`;
+            }
+    
+            return element;
+        }
+    
+        function updatePreview() {
+            const previewArea = document.getElementById('previewArea');
+            previewArea.innerHTML = '';
+            
+            components.filter(c => c.parentId === null).forEach(component => {
+                previewArea.appendChild(createPreviewElement(component));
+            });
+        }
+    
+        function createPreviewElement(component) {
+            const element = document.createElement('div');
+            const children = components.filter(c => c.parentId === component.id);
+            
+            switch(component.type) {
+                case 'card':
+                    element.className = 'preview-card';
+                    element.innerHTML = `
+                        <div class="preview-title">${getPropValue(component, 'Title')}</div>
+                        <div class="preview-content"></div>
+                    `;
+                    children.forEach(child => {
+                        element.querySelector('.preview-content').appendChild(
+                            createPreviewElement(child)
+                        );
+                    });
+                    break;
+                    
+                case 'text':
+                    element.className = 'preview-text';
+                    element.style.color = getPropValue(component, 'Color') || '#333';
+                    element.style.fontSize = (getPropValue(component, 'FontSize') || '14') + 'px';
+                    element.textContent = getPropValue(component, 'Text');
+                    break;
+                    
+                case 'button':
+                    element.className = 'preview-button';
+                    element.textContent = getPropValue(component, 'Text');
+                    element.style.width = getPropValue(component, 'Width') ?
+                        `${getPropValue(component, 'Width')}px` : 'auto';
+                    element.style.height = `${getPropValue(component, 'Height') || 35}px`;
+                    break;
+                    
+                case 'hint':
+                    element.className = 'preview-hint';
+                    element.textContent = getPropValue(component, 'Text');
+                    element.style.background = getPropValue(component, 'IsWarn') ? 
+                        '#f8d7da' : '#d4edda';
+                    break;
+                    
+                case 'image':
+                    const height = getPropValue(component, 'Height') || 100;
+                    element.innerHTML = `
+                        <img src="${getPropValue(component, 'Source')}" 
+                            style="height:${height}px;
+                                display:block; 
+                                margin:8px 0;
+                                border-radius:4px;">
+                    `;
+                    break;
+            }
+            
+            return element;
+        }
+    
+        function getPropValue(component, propName) {
+            const block = document.querySelector(`[data-id="${component.id}"]`);
+            const input = block?.querySelector(`[data-prop="${propName}"]`);
+            if (!input) return null;
+            
+            if (input.type === 'checkbox') {
+                return input.checked;
+            }
+            return input.value;
+        }
+    
+        // 实时更新预览
+        document.addEventListener('input', (e) => {
+            if (e.target.closest('.component-block')) {
+                updatePreview();
+            }
+        });
+    
+        // 初始化示例组件
+        window.addEventListener('DOMContentLoaded', () => {
+            addComponent();
+            updatePreview();
+        });
+    </script>
+</body>
+</html>
